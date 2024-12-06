@@ -1,6 +1,4 @@
-streamlit
-pickle
-os
+streamlit>=1.40.2
 opencv-python
 roboflow
 numpy
