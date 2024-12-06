@@ -1,0 +1,6 @@
+streamlit
+pickle
+os
+opencv-python
+roboflow
+numpy
