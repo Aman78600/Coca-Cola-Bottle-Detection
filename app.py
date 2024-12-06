@@ -4,6 +4,8 @@ import numpy as np
 import pickle
 import os
 from roboflow import Roboflow
+import tempfile
+
 
 # Load model details from pickle file
 def load_roboflow_model():
@@ -39,57 +41,66 @@ def main():
     )
 
     if uploaded_image is not None:
-        # Read the uploaded image
-        file_bytes = uploaded_image.read()
-        
-        # Convert to OpenCV image
-        nparr = np.frombuffer(file_bytes, np.uint8)
-        image = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
-        
-        # Make a copy for drawing
-        result_image = image.copy()
+    # Read the uploaded image
+    file_bytes = uploaded_image.read()
 
-        # Predict using the loaded model
-        result = loaded_model.predict(uploaded_image.name, confidence=40, overlap=30).json()
+    # Convert to OpenCV image
+    nparr = np.frombuffer(file_bytes, np.uint8)
+    image = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
 
-        # Check if predictions exist
-        if result['predictions']:
-            # Draw bounding boxes
-            for prediction in result['predictions']:
-                # Convert from [x, y, width, height] to [x1, y1, x2, y2]
-                x1 = int(prediction['x'] - prediction['width'] / 2)
-                y1 = int(prediction['y'] - prediction['height'] / 2)
-                x2 = int(prediction['x'] + prediction['width'] / 2)
-                y2 = int(prediction['y'] + prediction['height'] / 2)
+    # Make a copy for drawing
+    result_image = image.copy()
 
-                # Draw rectangle
-                cv2.rectangle(
-                    result_image, 
-                    (x1, y1), (x2, y2), 
-                    color=(255, 0, 0), 
-                    thickness=2
-                )
-                
-                # Add label
-                label = f"{prediction['class']} {prediction['confidence']:.2f}"
-                cv2.putText(
-                    result_image, 
-                    label, 
-                    (x1, y1 - 10), 
-                    cv2.FONT_HERSHEY_SIMPLEX, 
-                    0.9, 
-                    (255, 0, 0), 
-                    2
-                )
+    # Save the uploaded image temporarily for Roboflow
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".jpg") as temp_file:
+        temp_file.write(file_bytes)
+        temp_file_path = temp_file.name
 
-            # Convert from BGR to RGB for Streamlit display
-            result_image_rgb = cv2.cvtColor(result_image, cv2.COLOR_BGR2RGB)
+    # Predict using the loaded model
+    try:
+        result = loaded_model.predict(temp_file_path, confidence=40, overlap=30).json()
+    except Exception as e:
+        st.error(f"Error during prediction: {e}")
+        return
+
+    # Check if predictions exist
+    if result.get('predictions'):
+        # Draw bounding boxes
+        for prediction in result['predictions']:
+            # Convert from [x, y, width, height] to [x1, y1, x2, y2]
+            x1 = int(prediction['x'] - prediction['width'] / 2)
+            y1 = int(prediction['y'] - prediction['height'] / 2)
+            x2 = int(prediction['x'] + prediction['width'] / 2)
+            y2 = int(prediction['y'] + prediction['height'] / 2)
+
+            # Draw rectangle
+            cv2.rectangle(
+                result_image, 
+                (x1, y1), (x2, y2), 
+                color=(255, 0, 0), 
+                thickness=2
+            )
             
-            # Display the image
-            st.image(result_image_rgb, caption='Detected Coca Cola Bottles')
+            # Add label
+            label = f"{prediction['class']} {prediction['confidence']:.2f}"
+            cv2.putText(
+                result_image, 
+                label, 
+                (x1, y1 - 10), 
+                cv2.FONT_HERSHEY_SIMPLEX, 
+                0.9, 
+                (255, 0, 0), 
+                2
+            )
+
+        # Convert from BGR to RGB for Streamlit display
+        result_image_rgb = cv2.cvtColor(result_image, cv2.COLOR_BGR2RGB)
         
-        else:
-            st.warning("No bottles detected in the image.")
+        # Display the image
+        st.image(result_image_rgb, caption='Detected Coca Cola Bottles')
+
+    else:
+        st.warning("No bottles detected in the image.")
 
 # Run the app
 if __name__ == "__main__":
